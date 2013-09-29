@@ -1,0 +1,24 @@
+{
+    "name": "korneil/jtmp-assetic-filter-bundle",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "description": "JTMP AsseticFilterBundle",
+    "keywords": ["assetic", "filter", "symfony", "bundle", "javascript", "template"],
+    "homepage": "https://github.com/korneil/JTMPAsseticFilterBundle",
+    "authors": [
+        {
+            "name": "Kornel Schadl",
+            "email": "neil@krnl.hu"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "php": ">=5.3.3",
+        "kriswallsmith/assetic": "1.1.*@dev",
+        "symfony/framework-bundle": "2.*"
+    },
+    "autoload": {
+        "psr-0": { "Korneil\\JTMPAsseticFilterBundle": "" }
+    },
+     "target-dir": "Korneil/JTMPAsseticFilterBundle"
+}
