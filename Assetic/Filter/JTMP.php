@@ -56,7 +56,13 @@ class JTMP implements FilterInterface
                     case '$':
                         $h = explode('|', $m[2][$j][0]);
                         $h[0] = $this->createJTmpVar($h[0]);
-                        $res .= 'r+=' . $h[0] . ';' . $lb;
+                        $functionCallsPref = '';
+                        $functionCallsSuf = '';
+                        for ($k = count($h) - 1; $k > 0; $k--) {
+                            $functionCallsPref .= $h[$k] . '(';
+                            $functionCallsSuf .= ')';
+                        }
+                        $res .= 'r+=' . $functionCallsPref . $h[0] . $functionCallsSuf . ';' . $lb;
                         break;
                     case '@':
                         if ($m[2][$j][0] == '') {
