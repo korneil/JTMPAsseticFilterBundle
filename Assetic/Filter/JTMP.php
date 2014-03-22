@@ -14,23 +14,48 @@ class JTMP implements FilterInterface
 
     public function filterDump(AssetInterface $asset)
     {
-        $data = $asset->getContent();
-
-        $data = preg_replace_callback('/<jtmp>(.*?)<\/jtmp>/sm', array($this, 'parseJTMPTag'), $data);
-
-        $asset->setContent($data);
+        $asset->setContent($this->parse($asset->getContent()));
     }
 
-    private function parseJTMPTag($match)
+    public function parse($data)
     {
-        return $this->compileJTmp($match[1]);
+        preg_match_all('/<jtmp(.*?)>(.*?)<\/jtmp>/sim', $data, $matches, PREG_SET_ORDER);
+        foreach ($matches as $m) {
+            $opts = [
+                'inline' => false,
+                'prefix' => '',
+                'postfix' => '',
+                'breakLines' => true,
+            ];
+
+            preg_match_all('/(\w+)\s*=\s*(?| "([^"]*?)" | \'([^\']*?)\')/x', $m[1], $attrs, PREG_SET_ORDER);
+            foreach ($attrs as $a) {
+                if (isset($opts[$a[1]])) {
+                    if (is_bool($opts[$a[1]])) {
+                        $opts[$a[1]] = !!$a[2];
+                    } else {
+                        $opts[$a[1]] = $a[2];
+                    }
+                }
+            }
+
+            $data = str_replace($m[0], $this->compileJTmp($m[2], $opts), $data);
+        }
+
+        return $data;
     }
 
-    private function compileJTmp($jData, $breakLines = false)
+    private function compileJTmp($jData, $opts)
     {
-        $lb = $breakLines ? "\n" : '';
+        $lb = $opts['breakLines'] ? "\n" : '';
+        $inline = $opts['inline'];
+        $prefix = $opts['prefix'];
+        $postfix = $opts['postfix'];
 
-        $res = '{' . $lb;
+        $res = '';
+        if (!$inline) {
+            $res .= '{' . $lb;
+        }
         $cB = preg_match_all('/_\{(.*?)\}(.*?)_\{\}/sm', $jData, $blocks);
         for ($i = 0; $i < $cB; $i++) {
             $h = explode("\n", $blocks[2][$i]);
@@ -45,7 +70,11 @@ class JTMP implements FilterInterface
 
             $cM = preg_match_all('/([\$|@|\?|\!|\^]){(.*?)\}/sm', $x, $m, PREG_OFFSET_CAPTURE);
 
-            $res .= '"' . $blocks[1][$i] . '":function(x){r="";' . $lb;
+            if ($inline) {
+                $res .= 'function ' . $prefix . $blocks[1][$i] . $postfix . '(){var r="";' . $lb;
+            } else {
+                $res .= '"' . $blocks[1][$i] . '":function(x){var r="";' . $lb;
+            }
             for ($j = 0; $j < $cM; $j++) {
                 $pos = ($j == 0 ? 0 : $m[0][$j - 1][1] + strlen($m[0][$j - 1][0]));
                 $before = $this->solidTrim(substr($x, $pos, $m[0][$j][1] - $pos));
@@ -54,26 +83,34 @@ class JTMP implements FilterInterface
                 }
                 switch ($m[1][$j][0]) {
                     case '$':
-                        $h = explode('|', $m[2][$j][0]);
-                        $h[0] = $this->createJTmpVar($h[0]);
-                        $functionCallsPref = '';
-                        $functionCallsSuf = '';
-                        for ($k = count($h) - 1; $k > 0; $k--) {
-                            $functionCallsPref .= $h[$k] . '(';
-                            $functionCallsSuf .= ')';
+                        if ($inline) {
+                            $res .= 'r+=' . $m[2][$j][0] . ';' . $lb;
+                        } else {
+                            $h = explode('|', $m[2][$j][0]);
+                            $h[0] = $this->createJTmpVar($h[0]);
+                            $functionCallsPref = '';
+                            $functionCallsSuf = '';
+                            for ($k = count($h) - 1; $k > 0; $k--) {
+                                $functionCallsPref .= $h[$k] . '(';
+                                $functionCallsSuf .= ')';
+                            }
+                            $res .= 'r+=' . $functionCallsPref . $h[0] . $functionCallsSuf . ';' . $lb;
                         }
-                        $res .= 'r+=' . $functionCallsPref . $h[0] . $functionCallsSuf . ';' . $lb;
                         break;
                     case '@':
                         if ($m[2][$j][0] == '') {
                             $res .= '}' . $lb;
                         } else {
                             $h = explode('|', $m[2][$j][0]);
-                            $h[0] = $this->createJTmpVar($h[0]);
-                            $h[1] = $this->createJTmpVar($h[1]);
+                            if (!$inline) {
+                                $h[0] = $this->createJTmpVar($h[0]);
+                                $h[1] = $this->createJTmpVar($h[1]);
+                                if (isset($h[2])) {
+                                    $h[2] = $this->createJTmpVar($h[2]);
+                                }
+                            }
                             if (isset($h[2])) {
-                                $res .= 'for(' . $h[1] . ' in ' . $h[0] . '){' .
-                                    $this->createJTmpVar($h[2]) . '=' . $h[0] . '[' . $h[1] . '];' . $lb;
+                                $res .= 'for(' . $h[1] . ' in ' . $h[0] . '){' . $h[2] . '=' . $h[0] . '[' . $h[1] . '];' . $lb;
                             } else {
                                 $res .= 'for(' . $h[1] . '=0;' . $h[1] . '<' . $h[0] . '.length;' . $h[1] . '++){' . $lb;
                             }
@@ -83,14 +120,22 @@ class JTMP implements FilterInterface
                         if ($m[2][$j][0] == '') {
                             $res .= '}' . $lb;
                         } else {
-                            $res .= 'if(' . $this->createJTmpVar($m[2][$j][0]) . '){' . $lb;
+                            if ($inline) {
+                                $res .= 'if(' . $m[2][$j][0] . '){' . $lb;
+                            } else {
+                                $res .= 'if(' . $this->createJTmpVar($m[2][$j][0]) . '){' . $lb;
+                            }
                         }
                         break;
                     case '!':
                         $res .= '}else{' . $lb;
                         break;
                     case '^':
-                        $res .= 'r+=this["' . $m[2][$j][0] . '"](x);' . $lb;
+                        if ($inline) {
+                            $res .= 'r+=' . $prefix . $m[2][$j][0] . $postfix . '();' . $lb;
+                        } else {
+                            $res .= 'r+=this["' . $m[2][$j][0] . '"](x);' . $lb;
+                        }
                         break;
                 }
             }
@@ -99,11 +144,13 @@ class JTMP implements FilterInterface
                 $res .= 'r+="' . addslashes($h) . '";' . $lb;
             }
             $res .= 'return r;}' . $lb;
-            if ($i < $cB - 1) {
+            if (!$inline && $i < $cB - 1) {
                 $res .= ',' . $lb;
             }
         }
-        $res .= '}' . $lb;
+        if (!$inline) {
+            $res .= '}' . $lb;
+        }
 
         return $res;
     }
