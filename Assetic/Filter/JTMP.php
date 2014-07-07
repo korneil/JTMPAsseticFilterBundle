@@ -102,17 +102,31 @@ class JTMP implements FilterInterface
                             $res .= '}' . $lb;
                         } else {
                             $h = explode('|', $m[2][$j][0]);
-                            if (!$inline) {
+                            if ($inline) {
+                                if (isset($h[2])) {
+                                    $res .= 'for(';
+                                    if (strpos($h[1], '.') === false && strpos($h[1], '[') === false) {
+                                        $res .= 'var ';
+                                    }
+                                    $res .= $h[1] . ' in ' . $h[0] . '){';
+
+                                    if (strpos($h[2], '.') === false && strpos($h[2], '[') === false) {
+                                        $res .= 'var ';
+                                    }
+                                    $res .= $h[2] . '=' . $h[0] . '[' . $h[1] . '];' . $lb;
+                                } else {
+                                    $res .= 'for(' . $h[1] . '=0;' . $h[1] . '<' . $h[0] . '.length;' . $h[1] . '++){' . $lb;
+                                }
+                            } else {
                                 $h[0] = $this->createJTmpVar($h[0]);
                                 $h[1] = $this->createJTmpVar($h[1]);
                                 if (isset($h[2])) {
                                     $h[2] = $this->createJTmpVar($h[2]);
+                                    $res .= 'for(' . $h[1] . ' in ' . $h[0] . '){' . $h[2] . '=' . $h[0] . '[' . $h[1] . '];' . $lb;
+                                } else {
+                                    $res .= 'for(' . $h[1] . '=0;' . $h[1] . '<' . $h[0] . '.length;' . $h[1] . '++){' . $lb;
                                 }
-                            }
-                            if (isset($h[2])) {
-                                $res .= 'for(' . $h[1] . ' in ' . $h[0] . '){' . $h[2] . '=' . $h[0] . '[' . $h[1] . '];' . $lb;
-                            } else {
-                                $res .= 'for(' . $h[1] . '=0;' . $h[1] . '<' . $h[0] . '.length;' . $h[1] . '++){' . $lb;
+
                             }
                         }
                         break;
